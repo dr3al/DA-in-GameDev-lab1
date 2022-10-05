@@ -1,5 +1,5 @@
 # АНАЛИЗ ДАННЫХ И ИСКУССТВЕННЫЙ ИНТЕЛЛЕКТ [in GameDev]
-Отчет по лабораторной работе #1 выполнил(а):
+Отчет по лабораторной работе #2 выполнил(а):
 - Клевцов Андрей Константинович
 - 2048873 
 * Отметка о выполнении заданий (заполняется студентом):
@@ -35,175 +35,157 @@
 - ✨Magic ✨
 
 ## Цель работы
-Ознакомиться с основными операторами зыка Python на примере реализации линейной регрессии.
-
+Познакомиться с программными средствами для организции передачи данных между инструментами google, Python и Unity
 ## Задание 1
-### Установить Python и написать простую программу
+### Реализовать совместную работу и передачу данных в связке Python - Google-Sheets – Unity.
 Ход работы:
-- Установил Python
-- Написал простую программу
+- Реализовал запись данных из скрипта на Python в Google Sheets
 
 ```py
-print("Hello world!")
+import gspread
+import numpy as np
+gc = gspread.service_account(filename='unity-364106-24951b8b63a1.json')
+sh = gc.open("UnityTable")
+price = np.random.randint(2000, 10000, 11)
+mon = list(range(1,11))
+i = 0
+for i in range(1,12):
+    tempInf = ((price[i-1]-price[i-2])/price[i-2])*100
+    tempInf = str(tempInf)
+    tempInf = tempInf.replace('.', ',')
+    sh.sheet1.update(('A' + str(i)), str(i))
+    sh.sheet1.update(('B' + str(i)), str(price[i-1]))
+    sh.sheet1.update(('C' + str(i)), str(tempInf))
+    print(tempInf)
 ```
-![image](https://user-images.githubusercontent.com/47189738/192506350-447b01e3-5182-4d09-a052-74038c7299a4.png)
+- Результат работы скрипта
+![image](https://user-images.githubusercontent.com/47189738/193554025-ee158bd1-2f7a-45e9-9e49-57bd41ad017d.png)
 
-## Задание 2
-### Установить Unity и написать простой скрипт
-- Установил программное обеспечение
-- Написал простой скрипт и прикрепил его к объекту
+- Появившиеся данные в таблице
+![image](https://user-images.githubusercontent.com/47189738/193554337-6418914f-ff1a-4fc4-a17c-32c6b7351626.png)
+
+- Реализовал получение данных из таблицы на Unity
 
 ```csharp
-using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
-
-public class script : MonoBehaviour
-{
-    // Start is called before the first frame update
-    void Start()
+IEnumerator GoogleSheets()
     {
-        print("Hello_world!");
+        UnityWebRequest currentResp = UnityWebRequest.Get("https://sheets.googleapis.com/v4/spreadsheets/1b3TTGpu8J1ilywo-XcQjDfggJIDo1ETaJrrlKKnaa7s/values/Лист1?key=token");
+        yield return currentResp.SendWebRequest();
+        string rawResp = currentResp.downloadHandler.text;
+        var rawJson = JSON.Parse(rawResp);
+        foreach (var ItemRawJson in rawJson["values"])
+        {
+            var parseJson = JSON.Parse(ItemRawJson.ToString());
+            var selectRow = parseJson[0].AsStringList;
+            dataSet.Add(("Mon_" + selectRow[0]), float.Parse(selectRow[2]));
+        }
     }
-
-    // Update is called once per frame
-    void Update()
-    {
-        
-    }
-}
 ```
-![image](https://user-images.githubusercontent.com/47189738/192606204-81a869b0-2b44-4ca3-8a50-88ff70a6df75.png)
+- Реализовал воспроизведение аудио в зависимости от полученных из таблицы данных
+
+```csharp
+void Update()
+    {
+        if (i-1 != dataSet.Count & dataSet.ContainsKey("Mon_" + i.ToString()) & statusStart==false)
+        {
+            if (dataSet["Mon_" + i.ToString()] <= 10)
+            {
+                StartCoroutine(PlaySelectAudioGood());
+                Debug.Log(dataSet["Mon_" + i.ToString()]);
+            }
+
+            else if (dataSet["Mon_" + i.ToString()] > 10 & dataSet["Mon_" + i.ToString()] < 100)
+            {
+                StartCoroutine(PlaySelectAudioNormal());
+                Debug.Log(dataSet["Mon_" + i.ToString()]);
+            }
+
+            else if (dataSet["Mon_" + i.ToString()] >= 100)
+            {
+                StartCoroutine(PlaySelectAudioBad());
+                Debug.Log(dataSet["Mon_" + i.ToString()]);
+            }
+        }
+    }
+    
+IEnumerator PlaySelectAudioGood()
+    {
+        statusStart = true;
+        selectAudio = GetComponent<AudioSource>();
+        selectAudio.clip = goodSpeak;
+        selectAudio.Play();
+        yield return new WaitForSeconds(3);
+        statusStart = false;
+        i++;
+    }
+
+    IEnumerator PlaySelectAudioNormal()
+    {
+        statusStart = true;
+        selectAudio = GetComponent<AudioSource>();
+        selectAudio.clip = normalSpeak;
+        selectAudio.Play();
+        yield return new WaitForSeconds(2);
+        statusStart = false;
+        i++;
+    }
+
+    IEnumerator PlaySelectAudioBad()
+    {
+        statusStart = true;
+        selectAudio = GetComponent<AudioSource>();
+        selectAudio.clip = badSpeak;
+        selectAudio.Play();
+        yield return new WaitForSeconds(4);
+        statusStart = false;
+        i++;
+    }
+```
+- Результат работы
+![image](https://user-images.githubusercontent.com/47189738/193557520-87953072-12b6-43bb-842d-578b0b538029.png)
+
+## Задание 2
+### Реализовать запись в Google-таблицу набора данных, полученных с помощью линейной регрессии из лабораторной работы № 1
+- Переписал функцию iterate() из лабораторной работы №1, чтобы она каждую n-ую итерацию выводила в таблицу значение loss и разницу с предыдущим значением.
+
+```py
+def iterate(a, b, x, y, times):
+    prevLoss, loss = 0, 0
+    for i in range(times):
+        a, b = optimize(a, b, x, y)
+        if i==0:
+            loss = loss_function(a, b, x, y)
+            sh.sheet1.update(('A' + str(i // 10 + 1)), str(i+1))
+            sh.sheet1.update(('B' + str(i // 10 + 1)), str(loss))
+        elif times <= 300 and i%10==0:
+            prevLoss, loss = loss, loss_function(a, b, x, y)
+            sh.sheet1.update(('A' + str(i // 10 + 1)), str(i))
+            sh.sheet1.update(('B' + str(i // 10 + 1)), str(loss))
+            sh.sheet1.update(('C' + str(i // 10 + 1)), str(prevLoss - loss))
+        elif times > 300 and times <= 3000 and i%100==0:
+            prevLoss, loss = loss, loss_function(a, b, x, y)
+            sh.sheet1.update(('A' + str(i//100 + 1)), str(i))
+            sh.sheet1.update(('B' + str(i//100 + 1)), str(loss))
+            sh.sheet1.update(('C' + str(i//100 + 1)), str(prevLoss-loss))
+        elif times > 3000 and i%1000==0:
+            prevLoss, loss = loss, loss_function(a, b, x, y)
+            sh.sheet1.update(('A' + str(i // 1000 + 1)), str(i))
+            sh.sheet1.update(('B' + str(i // 1000 + 1)), str(loss))
+            sh.sheet1.update(('C' + str(i // 1000 + 1)), str(prevLoss - loss))
+    return a, b
+```
+![image](https://user-images.githubusercontent.com/47189738/194012131-17b93b96-c5fa-42fe-9ca7-c261959e63ae.png)
+
 ## Задание 3
-### Пошагово выполнить каждый пункт раздела "ход работы" с описанием и примерами реализации задач
-Ход работы
-1. Произвести подготовку данных для работы с алгоритмом линейной регрессии. 10 видов данных были установлены случайным образом, и данные находились в линейной зависимости. Данные преобразуются в формат массива, чтобы их можно было вычислить напрямую при использовании умножения и сложения.
+### Самостоятельно разработать сценарий воспроизведения звукового сопровождения в Unity в зависимости от изменения считанных данных в задании 2
 
-```py
-import numpy as np
-import matplotlib.pyplot as plt
-
-%matplotlib inline
-
-x = [3,21,22,34,54,34,55,67,89,99]
-x = np.array(x)
-y = [2,22,24,65,79,82,55,130,150,199]
-y = np.array(y)
-
-plt.scatter(x,y)
-```
-![image](https://user-images.githubusercontent.com/47189738/192610050-8e40f9ad-9214-4663-ad72-b1e31f048d11.png)
-
-2. Определите связанные функции. Функция модели: определяет модель линейной регрессии wx+b. Функция потерь: функция потерь среднеквадратичной ошибки. Функция оптимизации: метод градиентного спуска для нахождения частных производных w и b.
-
-```py
-def model(a, b, x):
-  return a*x + b
-
-def loss_function(a, b, x, y):
-  num = len(x)
-  prediction=model(a,b,x)
-  return (0.5/num) * (np.square(prediction-y)).sum()
-  
-def optimize(a,b,x,y):
-  num = len(x)
-  prediction = model(a,b,x)
-  da = (1.0/num) * ((prediction -y)*x).sum()
-  db = (1.0/num) * ((prediction -y).sum())
-  a = a - Lr*da
-  b = b - Lr*db
-  return a, b
-  
-def iterate(a,b,x,y,times):
-  for i in range(times):
-    a,b = optimize(a,b,x,y)
-  return a,b
-```
-
-3. Начать итерацию
-- Шаг 1. Инициализация и модель итеративной оптимизации.
-
-```py
-a = np.random.rand(1)
-print(a)
-b = np.random.rand(1)
-print(b)
-Lr = 0.000001
-a,b = iterate(a,b,x,y,1)
-prediction=model(a,b,x)
-loss = loss_function(a, b, x, y)
-print(a,b,loss)
-plt.scatter(x,y)
-plt.plot(x,prediction)
-```
-![image](https://user-images.githubusercontent.com/47189738/192611577-e8bf9de1-92db-4d65-acd5-0e3a38d7a67c.png)
-
-- Шаг 2. На второй итерации отображаются значения параметров, значения.
-
-```py
-a,b = iterate(a,b,x,y,2)
-prediction=model(a,b,x)
-loss = loss_function(a, b, x, y)
-print(a,b,loss)
-plt.scatter(x,y)
-plt.plot(x,prediction)
-```
-![image](https://user-images.githubusercontent.com/47189738/192611855-d79b22a3-79a3-4af7-8ce0-0bcb2f819b2b.png)
-
-- Шаг 3. Третья итерация показывает значения параметров, значения потерь и визуализацию после итерации.
-
-```py
-a,b = iterate(a,b,x,y,3)
-prediction=model(a,b,x)
-loss = loss_function(a, b, x, y)
-print(a,b,loss)
-plt.scatter(x,y)
-plt.plot(x,prediction)
-```
-![image](https://user-images.githubusercontent.com/47189738/192612715-4e614b8e-dc9d-49ba-b353-0c021c81c2f7.png)
-
-- Шаг 4. На четвертой итерации отображаются значения параметров, значения потерь и эффекты визуализации.
-
-```py
-a,b = iterate(a,b,x,y,4)
-prediction=model(a,b,x)
-loss = loss_function(a, b, x, y)
-print(a,b,loss)
-plt.scatter(x,y)
-plt.plot(x,prediction)
-```
-![image](https://user-images.githubusercontent.com/47189738/192612928-49e4372e-1ea7-42fc-8797-3b6f50c9a812.png)
-
-- Шаг 5. Пятая итерация показывает значение параметра, значение потерь и эффект визуализации после итерации.
-
-```py
-a,b = iterate(a,b,x,y,5)
-prediction=model(a,b,x)
-loss = loss_function(a, b, x, y)
-print(a,b,loss)
-plt.scatter(x,y)
-plt.plot(x,prediction)
-```
-![image](https://user-images.githubusercontent.com/47189738/192614014-daf8dfcd-1e4a-49c7-bcf2-8df2d962e9c3.png)
-
-- Шаг 6. 10000-я итерация, показывающая значения параметров, потери и визуализацию после итерации.
-
-```py
-a,b = iterate(a,b,x,y,10000)
-prediction=model(a,b,x)
-loss = loss_function(a, b, x, y)
-print(a,b,loss)
-plt.scatter(x,y)
-plt.plot(x,prediction)
-```
-![image](https://user-images.githubusercontent.com/47189738/192614361-dafd6852-766d-49d8-bb07-dfb66cce553a.png)
-
+![image](https://user-images.githubusercontent.com/47189738/194034887-9cb545af-fd19-4e5d-8c56-1a766a814e2c.png)
+- Немного изменил границы значений для каждого звука
 
 ## Выводы
 
-- Произвел подготовку данных для работы с алгоритмом линейной регрессии.
-- Определите связанные функции.
-- Посмотрел изменения после нескольких итераций.
+- Реализовал связку Python - Google Sheets - Unity 
+- Звуковое ранжирование данных в Unity
 
 | Plugin | README |
 | ------ | ------ |
