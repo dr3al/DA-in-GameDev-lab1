@@ -179,7 +179,31 @@ def iterate(a, b, x, y, times):
 ## Задание 3
 ### Самостоятельно разработать сценарий воспроизведения звукового сопровождения в Unity в зависимости от изменения считанных данных в задании 2
 
-![image](https://user-images.githubusercontent.com/47189738/194034887-9cb545af-fd19-4e5d-8c56-1a766a814e2c.png)
+```csharp
+void Update()
+    {
+        if (i-1 != dataSet.Count & dataSet.ContainsKey("Mon_" + i.ToString()) & statusStart==false)
+        {
+            if (dataSet["Mon_" + i.ToString()] <= 105)
+            {
+                StartCoroutine(PlaySelectAudioGood());
+                Debug.Log(dataSet["Mon_" + i.ToString()]);
+            }
+
+            else if (dataSet["Mon_" + i.ToString()] > 105 & dataSet["Mon_" + i.ToString()] < 180)
+            {
+                StartCoroutine(PlaySelectAudioNormal());
+                Debug.Log(dataSet["Mon_" + i.ToString()]);
+            }
+
+            else if (dataSet["Mon_" + i.ToString()] >= 180)
+            {
+                StartCoroutine(PlaySelectAudioBad());
+                Debug.Log(dataSet["Mon_" + i.ToString()]);
+            }
+        }
+    }
+```
 - Немного изменил границы значений для каждого звука
 
 ## Выводы
