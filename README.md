@@ -37,179 +37,312 @@
 ## Цель работы
 Познакомиться с программными средствами для организции передачи данных между инструментами google, Python и Unity
 ## Задание 1
-### Реализовать совместную работу и передачу данных в связке Python - Google-Sheets – Unity.
-Ход работы:
-- Реализовал запись данных из скрипта на Python в Google Sheets
-
-```py
-import gspread
-import numpy as np
-gc = gspread.service_account(filename='unity-364106-24951b8b63a1.json')
-sh = gc.open("UnityTable")
-price = np.random.randint(2000, 10000, 11)
-mon = list(range(1,11))
-i = 0
-for i in range(1,12):
-    tempInf = ((price[i-1]-price[i-2])/price[i-2])*100
-    tempInf = str(tempInf)
-    tempInf = tempInf.replace('.', ',')
-    sh.sheet1.update(('A' + str(i)), str(i))
-    sh.sheet1.update(('B' + str(i)), str(price[i-1]))
-    sh.sheet1.update(('C' + str(i)), str(tempInf))
-    print(tempInf)
-```
-- Результат работы скрипта
-![image](https://user-images.githubusercontent.com/47189738/193554025-ee158bd1-2f7a-45e9-9e49-57bd41ad017d.png)
-
-- Появившиеся данные в таблице
-![image](https://user-images.githubusercontent.com/47189738/193554337-6418914f-ff1a-4fc4-a17c-32c6b7351626.png)
-
-- Реализовал получение данных из таблицы на Unity
-
+### Реализовать систему машинного обучения в связке Python - Google-Sheets – Unity.
+- Подготовил Unity проект для обучения: добавил необходимые компоненты и скрипт для шара.
+- В anaconda создал окружение и добавил в них необходимые библиотеки.
+![image](https://user-images.githubusercontent.com/47189738/196631511-bc46c54f-a8e7-4d97-812c-9e9ca265b212.png)
 ```csharp
-IEnumerator GoogleSheets()
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using Unity.MLAgents;
+using Unity.MLAgents.Sensors;
+using Unity.MLAgents.Actuators;
+
+public class RollerAgent : Agent
+{
+    Rigidbody rBody;
+    // Start is called before the first frame update
+    void Start()
     {
-        UnityWebRequest currentResp = UnityWebRequest.Get("https://sheets.googleapis.com/v4/spreadsheets/1b3TTGpu8J1ilywo-XcQjDfggJIDo1ETaJrrlKKnaa7s/values/Лист1?key=token");
-        yield return currentResp.SendWebRequest();
-        string rawResp = currentResp.downloadHandler.text;
-        var rawJson = JSON.Parse(rawResp);
-        foreach (var ItemRawJson in rawJson["values"])
+        rBody = GetComponent<Rigidbody>();
+    }
+
+    public Transform Target;
+    public override void OnEpisodeBegin()
+    {
+        if (this.transform.localPosition.y < 0)
         {
-            var parseJson = JSON.Parse(ItemRawJson.ToString());
-            var selectRow = parseJson[0].AsStringList;
-            dataSet.Add(("Mon_" + selectRow[0]), float.Parse(selectRow[2]));
+            this.rBody.angularVelocity = Vector3.zero;
+            this.rBody.velocity = Vector3.zero;
+            this.transform.localPosition = new Vector3(0, 0.5f, 0);
+        }
+
+        Target.localPosition = new Vector3(Random.value * 8-4, 0.5f, Random.value * 8-4);
+    }
+    public override void CollectObservations(VectorSensor sensor)
+    {
+        sensor.AddObservation(Target.localPosition);
+        sensor.AddObservation(this.transform.localPosition);
+        sensor.AddObservation(rBody.velocity.x);
+        sensor.AddObservation(rBody.velocity.z);
+    }
+    public float forceMultiplier = 10;
+    public override void OnActionReceived(ActionBuffers actionBuffers)
+    {
+        Vector3 controlSignal = Vector3.zero;
+        controlSignal.x = actionBuffers.ContinuousActions[0];
+        controlSignal.z = actionBuffers.ContinuousActions[1];
+        rBody.AddForce(controlSignal * forceMultiplier);
+
+        float distanceToTarget = Vector3.Distance(this.transform.localPosition, Target.localPosition);
+
+        if(distanceToTarget < 1.42f)
+        {
+            SetReward(1.0f);
+            EndEpisode();
+        }
+        else if (this.transform.localPosition.y < 0)
+        {
+            EndEpisode();
         }
     }
+}
 ```
-- Реализовал воспроизведение аудио в зависимости от полученных из таблицы данных
-
-```csharp
-void Update()
-    {
-        if (i-1 != dataSet.Count & dataSet.ContainsKey("Mon_" + i.ToString()) & statusStart==false)
-        {
-            if (dataSet["Mon_" + i.ToString()] <= 10)
-            {
-                StartCoroutine(PlaySelectAudioGood());
-                Debug.Log(dataSet["Mon_" + i.ToString()]);
-            }
-
-            else if (dataSet["Mon_" + i.ToString()] > 10 & dataSet["Mon_" + i.ToString()] < 100)
-            {
-                StartCoroutine(PlaySelectAudioNormal());
-                Debug.Log(dataSet["Mon_" + i.ToString()]);
-            }
-
-            else if (dataSet["Mon_" + i.ToString()] >= 100)
-            {
-                StartCoroutine(PlaySelectAudioBad());
-                Debug.Log(dataSet["Mon_" + i.ToString()]);
-            }
-        }
-    }
-    
-IEnumerator PlaySelectAudioGood()
-    {
-        statusStart = true;
-        selectAudio = GetComponent<AudioSource>();
-        selectAudio.clip = goodSpeak;
-        selectAudio.Play();
-        yield return new WaitForSeconds(3);
-        statusStart = false;
-        i++;
-    }
-
-    IEnumerator PlaySelectAudioNormal()
-    {
-        statusStart = true;
-        selectAudio = GetComponent<AudioSource>();
-        selectAudio.clip = normalSpeak;
-        selectAudio.Play();
-        yield return new WaitForSeconds(2);
-        statusStart = false;
-        i++;
-    }
-
-    IEnumerator PlaySelectAudioBad()
-    {
-        statusStart = true;
-        selectAudio = GetComponent<AudioSource>();
-        selectAudio.clip = badSpeak;
-        selectAudio.Play();
-        yield return new WaitForSeconds(4);
-        statusStart = false;
-        i++;
-    }
+- В корень unity проекта добавил конфигурационный файл нейронной сети.
+```yaml
+behaviors:
+  RollerBall:
+    trainer_type: ppo
+    hyperparameters:
+      batch_size: 10
+      buffer_size: 100
+      learning_rate: 3.0e-4
+      beta: 5.0e-4
+      epsilon: 0.2
+      lambd: 0.99
+      num_epoch: 3
+      learning_rate_schedule: linear
+    network_settings:
+      normalize: false
+      hidden_units: 128
+      num_layers: 2
+    reward_signals:
+      extrinsic:
+        gamma: 0.99
+        strength: 1.0
+    max_steps: 500000
+    time_horizon: 64
+    summary_freq: 10000
 ```
-- Результат работы
-![image](https://user-images.githubusercontent.com/47189738/193557520-87953072-12b6-43bb-842d-578b0b538029.png)
+- Запустил ML-агент
+![image](https://user-images.githubusercontent.com/47189738/196634929-6b26d5c6-6756-41e5-8566-9d1bc15dcc88.png)
+- Попробовал обучить модель на 9 копиях "Плоскость-Сфера-Куб"
+![image](https://user-images.githubusercontent.com/47189738/196635659-c3eb45d7-e502-4661-8497-d7927fe9b22c.png)
 
 ## Задание 2
-### Реализовать запись в Google-таблицу набора данных, полученных с помощью линейной регрессии из лабораторной работы № 1
-- Переписал функцию iterate() из лабораторной работы №1, чтобы она каждую n-ую итерацию выводила в таблицу значение loss и разницу с предыдущим значением.
-
-```py
-def iterate(a, b, x, y, times):
-    prevLoss, loss = 0, 0
-    for i in range(times):
-        a, b = optimize(a, b, x, y)
-        if i==0:
-            loss = loss_function(a, b, x, y)
-            sh.sheet1.update(('A' + str(i // 10 + 1)), str(i+1))
-            sh.sheet1.update(('B' + str(i // 10 + 1)), str(loss))
-        elif times <= 300 and i%10==0:
-            prevLoss, loss = loss, loss_function(a, b, x, y)
-            sh.sheet1.update(('A' + str(i // 10 + 1)), str(i))
-            sh.sheet1.update(('B' + str(i // 10 + 1)), str(loss))
-            sh.sheet1.update(('C' + str(i // 10 + 1)), str(prevLoss - loss))
-        elif times > 300 and times <= 3000 and i%100==0:
-            prevLoss, loss = loss, loss_function(a, b, x, y)
-            sh.sheet1.update(('A' + str(i//100 + 1)), str(i))
-            sh.sheet1.update(('B' + str(i//100 + 1)), str(loss))
-            sh.sheet1.update(('C' + str(i//100 + 1)), str(prevLoss-loss))
-        elif times > 3000 and i%1000==0:
-            prevLoss, loss = loss, loss_function(a, b, x, y)
-            sh.sheet1.update(('A' + str(i // 1000 + 1)), str(i))
-            sh.sheet1.update(('B' + str(i // 1000 + 1)), str(loss))
-            sh.sheet1.update(('C' + str(i // 1000 + 1)), str(prevLoss - loss))
-    return a, b
+### Подробно опишите каждую строку файла конфигурации нейронной сети.
+```yaml
+behaviors:
+  RollerBall:
+    trainer_type: ppo
+    hyperparameters:
+      batch_size: 10
+      buffer_size: 100
+      learning_rate: 3.0e-4
+      beta: 5.0e-4
+      epsilon: 0.2
+      lambd: 0.99
+      num_epoch: 3
+      learning_rate_schedule: linear
+    network_settings:
+      normalize: false
+      hidden_units: 128
+      num_layers: 2
+    reward_signals:
+      extrinsic:
+        gamma: 0.99
+        strength: 1.0
+    max_steps: 500000
+    time_horizon: 64
+    summary_freq: 10000
 ```
-![image](https://user-images.githubusercontent.com/47189738/194012131-17b93b96-c5fa-42fe-9ca7-c261959e63ae.png)
+- **trainer_type: ppo** - тип обучения: с поощрением
+- **batch_size** - количество элементов выборки, с которыми идет работа в пределах одной итерации до изменения весов
+- **buffer_size** - количество опыта, который необходимо собрать перед обновлением модели политики
+- **learning_rate** - коэффициент скорости обучения
+- **beta** - регуляция энтропии для большего количества случайных действий
+- **epsilon** - допустимая разница между старой и новой политиками обучения
+- **lambd** - регуляция, используемая при рассчете оценки, будет ли агент полагаться на текущую оценку или на фактическое вознаграждение среды.
+- **num_epoch** - количество проходов, выполняемых через буфер опыта при выполнении оптимизации градиентного спуска
+- **learning_rate_schedule** - как будет меняться скорость обучения с течением времени
+- **normalize** - нормализация входных данных векторного наблюдения
+- **hidden_units** - количество единиц в скрытых слоях нейронной сети
+- **num_layers** - количество скрытых слоев в нейронной сети
+- **gamma** - коэффициент рассчета будущих вознаграждений от внешней среды. Зависимость от вознаграждений в будущем.
+- **strength** - значение на которое можно умножить вознаграждение, получаемое от внешней среды
+- **max_steps** - максимальное количество проходов
+- **time_horizon** - временная рамка промежуточной фиксации
+- **summary_freq** - количество проходов для промежуточной фиксации
+
+#### Decision Requester
+Запрос на принятие решения. Вызывает CollectObservation, а затем получает действие в OnActionReceived, 
+основанное на этом новом собранном наблюдении. С действиями из TakeActionBetweenDecisions он снова вызовет 
+OnActionReceived без сбора новых наблюдений и выведет последнее действие, которое он получил от нейронной сети.
+
+### Behavior Parameters
+Параметры поведения — У каждого Агента должно быть определенное поведение. Поведение определяет, как Агент 
+принимает решения. Максимальный шаг — Определяет, сколько шагов моделирования может произойти до 
+окончания эпизода Агента.
 
 ## Задание 3
-### Самостоятельно разработать сценарий воспроизведения звукового сопровождения в Unity в зависимости от изменения считанных данных в задании 2
-
+### Доработать сцену и обучить ML-Agent таким образом, чтобы шар перемещался между двумя кубами разного цвета.
+- Код для перемещения шара между кубами
 ```csharp
-void Update()
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using Unity.MLAgents;
+using Unity.MLAgents.Sensors;
+using Unity.MLAgents.Actuators;
+
+public class Move : Agent
+{
+    [SerializeField] private GameObject goldMine;
+    [SerializeField] private GameObject village;
+    private float speedMove;
+    private float timeMining;
+    private float month;
+    private bool checkMiningStart = false;
+    private bool checkMiningFinish = false;
+    private bool checkStartMonth = false;
+    private bool setSensor = true;
+    private float amountGold;
+    private float pickaxeСost;
+    private float profitPercentage;
+    private float[] pricesMonth = new float[2];
+    private float priceMonth;
+    private float tempInf;
+
+    // Start is called before the first frame update
+    public override void OnEpisodeBegin()
     {
-        if (i-1 != dataSet.Count & dataSet.ContainsKey("Mon_" + i.ToString()) & statusStart==false)
+        // If the Agent fell, zero its momentum
+        if (this.transform.localPosition != village.transform.localPosition)
         {
-            if (dataSet["Mon_" + i.ToString()] <= 105)
+            this.transform.localPosition = village.transform.localPosition;
+        }
+        checkMiningStart = false;
+        checkMiningFinish = false;
+        checkStartMonth = false;
+        setSensor = true;
+        priceMonth = 0.0f;
+        pricesMonth[0] = 0.0f;
+        pricesMonth[1] = 0.0f;
+        tempInf = 0.0f;
+        month = 1;
+    }
+    public override void CollectObservations(VectorSensor sensor)
+    {
+        sensor.AddObservation(speedMove);
+        sensor.AddObservation(timeMining);
+        sensor.AddObservation(amountGold);
+        sensor.AddObservation(pickaxeСost);
+        sensor.AddObservation(profitPercentage);
+    }
+
+    public override void OnActionReceived(ActionBuffers actionBuffers)
+    {
+        if (month < 3 || setSensor == true)
+        {
+            speedMove = Mathf.Clamp(actionBuffers.ContinuousActions[0], 1f, 10f);
+            Debug.Log("SpeedMove: " + speedMove);
+            timeMining = Mathf.Clamp(actionBuffers.ContinuousActions[1], 1f, 10f);
+            Debug.Log("timeMining: " + timeMining);
+            setSensor = false;
+            if (checkStartMonth == false)
             {
-                StartCoroutine(PlaySelectAudioGood());
-                Debug.Log(dataSet["Mon_" + i.ToString()]);
+                Debug.Log("Start Coroutine StartMonth");
+                StartCoroutine(StartMonth());
             }
 
-            else if (dataSet["Mon_" + i.ToString()] > 105 & dataSet["Mon_" + i.ToString()] < 180)
+            if (transform.position != goldMine.transform.position & checkMiningFinish == false)
             {
-                StartCoroutine(PlaySelectAudioNormal());
-                Debug.Log(dataSet["Mon_" + i.ToString()]);
+                transform.position = Vector3.MoveTowards(transform.position, goldMine.transform.position, Time.deltaTime * speedMove);
             }
 
-            else if (dataSet["Mon_" + i.ToString()] >= 180)
+            if (transform.position == goldMine.transform.position & checkMiningStart == false)
             {
-                StartCoroutine(PlaySelectAudioBad());
-                Debug.Log(dataSet["Mon_" + i.ToString()]);
+                Debug.Log("Start Coroutine StartGoldMine");
+                StartCoroutine(StartGoldMine());
+            }
+
+            if (transform.position != village.transform.position & checkMiningFinish == true)
+            {
+                transform.position = Vector3.MoveTowards(transform.position, village.transform.position, Time.deltaTime * speedMove);
+            }
+
+            if (transform.position == village.transform.position & checkMiningStart == true)
+            {
+                checkMiningFinish = false;
+                checkMiningStart = false;
+                setSensor = true;
+                amountGold = Mathf.Clamp(actionBuffers.ContinuousActions[2], 1f, 10f);
+                Debug.Log("amountGold: " + amountGold);
+                pickaxeСost = Mathf.Clamp(actionBuffers.ContinuousActions[3], 100f, 1000f);
+                Debug.Log("pickaxeСost: " + pickaxeСost);
+                profitPercentage = Mathf.Clamp(actionBuffers.ContinuousActions[4], 0.1f, 0.5f);
+                Debug.Log("profitPercentage: " + profitPercentage);
+
+                if (month != 2)
+                {
+                    priceMonth = pricesMonth[0] + ((pickaxeСost + pickaxeСost * profitPercentage) / amountGold);
+                    pricesMonth[0] = priceMonth;
+                    Debug.Log("priceMonth: " + priceMonth);
+                }
+                if (month == 2)
+                {
+                    priceMonth = pricesMonth[1] + ((pickaxeСost + pickaxeСost * profitPercentage) / amountGold);
+                    pricesMonth[1] = priceMonth;
+                    Debug.Log("priceMonth: " + priceMonth);
+                }
+
+            }
+        }
+        else
+        {
+            tempInf = ((pricesMonth[1] - pricesMonth[0]) / pricesMonth[0]) * 100;
+            if (tempInf <= 6f)
+            {
+                SetReward(1.0f);
+                Debug.Log("True");
+                Debug.Log("tempInf: " + tempInf);
+                EndEpisode();
+            }
+            else
+            {
+                SetReward(-1.0f);
+                Debug.Log("False");
+                Debug.Log("tempInf: " + tempInf);
+                EndEpisode();
             }
         }
     }
+
+    IEnumerator StartGoldMine()
+    {
+        checkMiningStart = true;
+        yield return new WaitForSeconds(timeMining);
+        Debug.Log("Mining Finish");
+        checkMiningFinish = true;
+    }
+
+    IEnumerator StartMonth()
+    {
+        checkStartMonth = true;
+        yield return new WaitForSeconds(60);
+        checkStartMonth = false;
+        month++;
+
+    }
+}
 ```
-- Немного изменил границы значений для каждого звука
-
 ## Выводы
+- Попробовал использовать ML-агент для обучения иоделей на Unity.
+- Рассмотрел параметры для настройки нейронной сети.
+- Обучил модели по разным задачам.
 
-- Реализовал связку Python - Google Sheets - Unity 
-- Звуковое ранжирование данных в Unity
+
 
 | Plugin | README |
 | ------ | ------ |
